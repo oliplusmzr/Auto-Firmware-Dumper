@@ -58,6 +58,9 @@ jobs:
           sudo chmod -R 755 *
           mkdir workdir
           bash scripts/full_setup.sh "$PWD/workdir"
+          # UV ve UVX komutlarını sudo'nun göreceği yere taşıyoruz
+          sudo cp /home/runner/.local/bin/uv /usr/bin/
+          sudo cp /home/runner/.local/bin/uvx /usr/bin/
         working-directory: ${{ github.workspace }}
 
       - name: Authorize Git And GitHub CLI
