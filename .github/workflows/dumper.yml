@@ -80,18 +80,36 @@ jobs:
 
       - name: Upload ROM Dump
         run: |
-          . scripts/common_functions.sh
-          dump_props_to_env_file $PWD/workdir/DumprX/out
-          ls $PWD/workdir/DumprX/out
-          . env
-          cd workdir/DumprX/out
+          if [ -f "scripts/common_functions.sh" ]; then
+              . scripts/common_functions.sh
+          fi
 
+          dump_props_to_env_file "$PWD/workdir/DumprX/out"
+          
+          if [ -f "env" ]; then
+              . env
+          elif [ -f "$PWD/workdir/DumprX/out/env" ]; then
+              . "$PWD/workdir/DumprX/out/env"
+          else
+              echo "UYARI: env dosyası bulunamadı, manuel tanımlama yapılıyor."
+              export DEVICE="a24"
+              export BRAND="samsung"
+              export CODENAME="a24"
+          fi
+
+          echo "Yüklenen Cihaz Bilgisi -> Marka: $BRAND, Model: $DEVICE, Kod: $CODENAME"
+
+          cd workdir/DumprX/out
           lineageDir="lineage-device-tree"
           teamWinDir="twrp-device-tree"
-          if [ -d $lineageDir ]; then cp -r $lineageDir ${{ github.workspace }}; fi
-          if [ -d $teamWinDir ]; then cp -r $teamWinDir ${{ github.workspace }}; fi
+          if [ -d "$lineageDir" ]; then cp -r "$lineageDir" "${{ github.workspace }}"; fi
+          if [ -d "$teamWinDir" ]; then cp -r "$teamWinDir" "${{ github.workspace }}"; fi
+
           compress_files "$PWD"
-          bash ${{ github.workspace }}/scripts/upload_to_repo.sh "$PWD" dump
+
+          bash "${{ github.workspace }}/scripts/upload_to_repo.sh" "$PWD" dump
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         working-directory: ${{ github.workspace }}
 
       - name: Create And Upload Vendor Tree
