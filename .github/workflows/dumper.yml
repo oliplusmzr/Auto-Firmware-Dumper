@@ -67,7 +67,7 @@ jobs:
       - name: Authorize Git And GitHub CLI
         run: |
           . scripts/common_functions.sh
-          git_auth "${{ env.UN }}" "${{ env.UEM }}" "${{ env.GITHUB_TOKEN }}"
+          git_auth "${{ env.UN }}" "${{ env.UEM }}" "${{ secrets.GTOKEN }}"
         working-directory: ${{ github.workspace }}
 
       - name: Create Dump
@@ -109,7 +109,7 @@ jobs:
 
           bash "${{ github.workspace }}/scripts/upload_to_repo.sh" "$PWD" dump
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GTOKEN }}
         working-directory: ${{ github.workspace }}
 
       - name: Create And Upload Vendor Tree
