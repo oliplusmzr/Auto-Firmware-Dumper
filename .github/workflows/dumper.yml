@@ -37,7 +37,7 @@ jobs:
     if: github.event.repository.owner.id == github.event.sender.id
     runs-on: ubuntu-latest
     env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GTOKEN }}
       TWT: ${{ github.event.inputs.UPLOAD_TWRP_DT }}
       LOT: ${{ github.event.inputs.UPLOAD_LINEAGE_DT }}
       GVT: ${{ github.event.inputs.GENERATE_VENDOR }}
