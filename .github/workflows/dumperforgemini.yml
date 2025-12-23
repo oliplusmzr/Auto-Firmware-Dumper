@@ -1,0 +1,142 @@
+name: Auto Firmware Dumper (Fixed)
+
+on:
+  workflow_dispatch:
+    inputs:
+      FIRMWARE_URL:
+        description: 'Direct Firmware Link (Direct Download Link Only!)'
+        required: true
+      GENERATE_VENDOR:
+        description: 'Create Vendor Tree'
+        required: true
+        default: 'false'
+        type: boolean
+      UPLOAD_LINEAGE_DT:
+        description: 'Upload LineageOS tree'
+        required: true
+        default: 'false'
+        type: boolean
+      UPLOAD_TWRP_DT:
+        description: 'Upload TWRP tree'
+        required: true
+        default: 'true' # TWRP istiyorsun diye true yaptım
+        type: boolean
+
+jobs:
+  dump:
+    name: Auto Firmware Dumper
+    runs-on: ubuntu-latest
+    env:
+      # GTOKEN yerine GitHub'ın kendi tokenini kullanıyoruz, ayar yapmana gerek kalmaz.
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TWT: ${{ github.event.inputs.UPLOAD_TWRP_DT }}
+      LOT: ${{ github.event.inputs.UPLOAD_LINEAGE_DT }}
+      GVT: ${{ github.event.inputs.GENERATE_VENDOR }}
+      FUR: ${{ github.event.inputs.FIRMWARE_URL }}
+
+    permissions:
+      contents: write  # Yazma izni şart!
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Disk temizliği (Rokibhasan action bazen hata veriyor, manuel temizlik daha garanti)
+      - name: Cleanup Disk
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          echo "Disk temizlendi."
+
+      - uses: sersoft-gmbh/setup-gh-cli-action@v2
+        with:
+          version: stable
+
+      - name: Setting Up Environment (Samsung Fix)
+        run: |
+          sudo chmod -R 755 *
+          mkdir workdir
+          # Scriptleri çek
+          bash scripts/full_setup.sh "$PWD/workdir"
+          
+          # Samsung için gerekli eksik paketleri yüklüyoruz
+          sudo apt-get update
+          sudo apt-get install -y erofs-utils lz4 python3-pip simg2img python3-setuptools
+          
+          # aospdtgen'i de kuralım, lazım olursa DumprX kullanır
+          pip3 install aospdtgen --break-system-packages || true
+        working-directory: ${{ github.workspace }}
+
+      - name: Create Dump
+        run: |
+          cd workdir/DumprX
+          echo "Dumping Firmware: ${{ env.FUR }}"
+          
+          # Dumper'ı çalıştır
+          sudo bash dumper.sh "${{ env.FUR }}"
+          
+          # Çıktı kontrolü (Boş mu dolu mu?)
+          if [ ! -f "out/board-info.txt" ]; then
+            echo "HATA: Dump işlemi başarısız oldu! 'out' klasörü boş veya eksik."
+            echo "Klasör içeriği:"
+            ls -R out || echo "out klasörü yok."
+            exit 1
+          fi
+          
+          sudo chown -R $USER:$USER out
+          sudo chmod -R 755 out
+        working-directory: ${{ github.workspace }}
+
+      - name: Upload ROM Dump
+        run: |
+          # Ortak fonksiyonları yükle
+          if [ -f "scripts/common_functions.sh" ]; then
+              . scripts/common_functions.sh
+          fi
+
+          # Env dosyasını yüklemeyi dene
+          dump_props_to_env_file "$PWD/workdir/DumprX/out"
+          if [ -f "env" ]; then
+              . env
+          elif [ -f "$PWD/workdir/DumprX/out/env" ]; then
+              . "$PWD/workdir/DumprX/out/env"
+          else
+              # Env yoksa manuel Samsung A24 bilgileri
+              export DEVICE="a24"
+              export BRAND="samsung"
+              export CODENAME="a24"
+              export DESCRIPTION="Samsung Galaxy A24 Dump"
+          fi
+
+          cd workdir/DumprX/out
+          
+          # Device Tree klasörlerini ana dizine al
+          lineageDir="lineage-device-tree"
+          teamWinDir="twrp-device-tree"
+          if [ -d "$lineageDir" ]; then cp -r "$lineageDir" "${{ github.workspace }}"; fi
+          if [ -d "$teamWinDir" ]; then cp -r "$teamWinDir" "${{ github.workspace }}"; fi
+
+          # Sadece Tree dosyalarını yükle (Dump çok büyükse fail verir, tree yeterli)
+          bash "${{ github.workspace }}/scripts/upload_to_repo.sh" "$PWD" dump
+        working-directory: ${{ github.workspace }}
+
+      - name: Upload TWRP Device Tree
+        if: env.TWT == 'true'
+        run: |
+          # Env dosyasını tekrar yükle (Garanti olsun)
+          if [ -f "env" ]; then . env; fi
+          if [ -f "$PWD/workdir/DumprX/out/env" ]; then . "$PWD/workdir/DumprX/out/env"; fi
+          
+          # Eğer değişkenler boşsa manuel ata
+          if [ -z "$BRAND" ]; then export BRAND="samsung"; fi
+          if [ -z "$CODENAME" ]; then export CODENAME="a24"; fi
+          
+          TARGET_DIR="$PWD/twrp-device-tree/$BRAND/$CODENAME"
+          
+          if [ -d "$TARGET_DIR" ]; then
+             bash ${{ github.workspace }}/scripts/upload_to_repo.sh "$TARGET_DIR" twrp recovery_device
+          else
+             echo "UYARI: TWRP Tree oluşturulamamış, yükleme atlanıyor."
+          fi
+        working-directory: ${{ github.workspace }}
+        continue-on-error: true
